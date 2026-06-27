@@ -26,17 +26,43 @@ months on average is consistent with the momentum holding periods documented in 
 
 ## Signals
 
-**Regime signal:** `regime = +1` when `rolling_20 < rolling_252 * 1.2` (low vol), `-1` otherwise (high vol).
+**Regime signal:** `regime = +1` when `rolling_20 < rolling_252 * 1.2` (low vol), 
+`-1` otherwise (high vol). Approximately 4 regime switches per year over 2010-2024.
 
-**Momentum signal:** (to be added — 20-day return, combined with regime)
+**Position:** long SPY when regime = +1 (low vol), cash when regime = -1 (high vol). 
+Signal lagged by one day to avoid lookahead bias.
+
+**Momentum signal:** *(to be added — 20-day return, combined with regime)*
 
 ## Backtest
 
+**Period:** 2010-2024, daily rebalancing.  
+**Benchmark:** SPY buy-and-hold.  
+**Risk-free rate:** 3-month US T-bill (^IRX), converted to daily decimal.
+
+| Metric | Buy & Hold | Regime Strategy |
+|---|---|---|
+| Cumulative return | 6.84x | 6.61x |
+| Sharpe ratio | 0.77 | 0.99 |
+| Max drawdown | 33.7% | 17.8% |
+| Regime switches | — | 61 |
+
 ## Results
+
+The regime strategy achieves nearly identical cumulative return to buy-and-hold 
+(6.61x vs 6.84x — giving up only ~3% of total return) while improving the Sharpe 
+ratio (0.99 vs 0.77) and nearly halving maximum drawdown (17.8% vs 33.7%). The 
+strategy underperforms during the sustained low-volatility bull market post-2018, 
+but the volatility filter's drawdown protection during stress periods largely 
+compensates. Combining the regime filter with a momentum signal is the natural 
+next step — the regime identifies market stress while momentum captures trend 
+direction within calm periods.
 
 ## Limitations
 - Past performance doesn't guarantee future regimes/results 
 - Using raw Close, not dividend-adjusted — understates true returns
-- No transaction costs yet (to be added once a backtest exists)
-- In-sample only so far — no train/test split yet
+- No transaction costs yet — switching between SPY and cash incurs costs not yet modelled
+- Regime filter reduces absolute returns vs buy-and-hold, particularly post-2018 
+  in sustained low-vol bull markets
+- Sharpe ratio and drawdown computed in-sample only — no train/test split yet
 
