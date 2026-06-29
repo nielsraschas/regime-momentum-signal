@@ -65,4 +65,16 @@ direction within calm periods.
 - Regime filter reduces absolute returns vs buy-and-hold, particularly post-2018 
   in sustained low-vol bull markets
 - Sharpe ratio and drawdown computed in-sample only — no train/test split yet
+- Momentum crashes: strategy is vulnerable to sharp market reversals 
+  (e.g. COVID 2020) where recent winners become losers rapidly — 
+  the signal lags the reversal catastrophically
+- Regime changes: when the macro environment shifts fundamentally 
+  (rate cycle reversal, recession onset), past 3-12 month price 
+  history stops being predictive — the volatility regime filter 
+  partially addresses this but does not eliminate the risk
+- Crowding: if too many participants run the same momentum strategy, 
+  the signal gets arbitraged away
+- Horizon sensitivity: momentum only works at 3-12 month horizons — 
+  mean reversion dominates at shorter horizons, full price reversal 
+  at longer horizons
 
