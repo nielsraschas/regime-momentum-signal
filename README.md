@@ -32,7 +32,11 @@ months on average is consistent with the momentum holding periods documented in 
 **Position:** long SPY when regime = +1 (low vol), cash when regime = -1 (high vol). 
 Signal lagged by one day to avoid lookahead bias.
 
-**Momentum signal:** *(to be added — 20-day return, combined with regime)*
+**Momentum signal:** 20-day cumulative return (`spy["returns"].rolling(20).sum()`). 
+Positive = recent winner, negative = recent loser.
+
+**Combined position:** long SPY only when regime = +1 (low vol) AND momentum > 0 
+(recent winner). Otherwise cash. Signal lagged by one day to avoid lookahead bias.
 
 ## Backtest
 
@@ -40,41 +44,79 @@ Signal lagged by one day to avoid lookahead bias.
 **Benchmark:** SPY buy-and-hold.  
 **Risk-free rate:** 3-month US T-bill (^IRX), converted to daily decimal.
 
-| Metric | Buy & Hold | Regime Strategy |
-|---|---|---|
-| Cumulative return | 6.84x | 6.61x |
-| Sharpe ratio | 0.77 | 0.99 |
-| Max drawdown | 33.7% | 17.8% |
-| Regime switches | — | 61 |
+| Metric | Buy & Hold | Regime Strategy | Combined Strategy |
+|---|---|---|---|
+| Cumulative return (no TC) | 6.84x | 6.61x | 4.01x |
+| Cumulative return (with TC) | 6.84x | 6.22x | 3.05x |
+| Sharpe ratio (no TC) | 0.77 | 0.99 | 0.91 |
+| Sharpe ratio (with TC, 0.1%/switch) | 0.77 | 0.96 | 0.72 |
+| Max drawdown (no TC) | 33.7% | 17.8% | 14.3% |
+| Max drawdown (with TC) | 33.7% | 18.7% | 19.3% |
+| Regime switches | — | 61 | 275 |
+
+**Out-of-sample split (with TC):**
+
+| Metric | Period | Buy & Hold | Regime Strategy | Combined Strategy |
+|---|---|---|---|---|
+| Sharpe ratio | Train (2010-2018) | 0.77 | 0.93 | 0.67 |
+| Sharpe ratio | Test (2019-2024) | 0.78 | 1.01 | 0.77 |
+| Max drawdown | Train (2010-2018) | 19.3% | 15.7% | 19.3% |
+| Max drawdown | Test (2019-2024) | 33.7% | 18.7% | 12.0% |
 
 ## Results
+
+**Summary: the regime signal alone is robust and adds value; the momentum 
+combination, as currently specified, does not.**
 
 The regime strategy achieves nearly identical cumulative return to buy-and-hold 
 (6.61x vs 6.84x — giving up only ~3% of total return) while improving the Sharpe 
 ratio (0.99 vs 0.77) and nearly halving maximum drawdown (17.8% vs 33.7%). The 
 strategy underperforms during the sustained low-volatility bull market post-2018, 
 but the volatility filter's drawdown protection during stress periods largely 
-compensates. Combining the regime filter with a momentum signal is the natural 
-next step — the regime identifies market stress while momentum captures trend 
-direction within calm periods.
+compensates. 
+
+Adding a 20-day momentum filter (invest only when regime = low vol AND 20-day 
+return > 0) significantly reduces cumulative return (4.0x vs 6.6x for regime-only) 
+despite marginally improving max drawdown (14.3% vs 17.8%). The 20-day momentum 
+signal is too noisy as a binary filter — it generates frequent unnecessary exits 
+within calm regimes, missing upside in a generally trending market. A longer 
+momentum window or continuous position sizing rather than binary filtering would 
+be more appropriate — left for future work.
+
+Accounting for transaction costs (0.1% per position change) confirms the regime 
+strategy's benefit is largely robust — cumulative return drops modestly from 
+6.61x to 6.22x (Sharpe 0.99 to 0.96) given its 61 switches over 14 years. The 
+combined regime+momentum strategy fares much worse: switching 275 times — 
+4.5x more often, since both the regime and momentum signals must independently 
+align — means transaction costs erode cumulative return from 4.01x to 3.05x 
+(Sharpe 0.91 to 0.72), now clearly below buy-and-hold on both metrics. This is 
+an important finding: a signal that looks marginally useful gross of costs 
+can become value-destructive once realistic trading costs are included, 
+reinforcing why the naive momentum combination is not adopted as currently 
+specified.
+
+An out-of-sample check (train 2010-2018, test 2019-2024) confirms the regime 
+strategy's robustness: it improves Sharpe over buy-and-hold in both periods 
+(0.77→0.93 train, 0.78→1.01 test) and reduces max drawdown in both (19.3%→15.7% 
+train, 33.7%→18.7% test). The combined strategy is less consistent — it 
+underperforms buy-and-hold on Sharpe in the train period (0.67 vs 0.77) but 
+roughly matches it in test (0.77 vs 0.78), while offering better drawdown 
+protection in both periods. This period-dependence, combined with the 
+transaction cost sensitivity already noted, suggests the regime signal alone 
+is the more robust and reliable component of this research.
 
 ## Limitations
-- Past performance doesn't guarantee future regimes/results 
-- Using raw Close, not dividend-adjusted — understates true returns
-- No transaction costs yet — switching between SPY and cash incurs costs not yet modelled
+- Momentum combination is not currently viable: naive 20-day binary filter is 
+  too noisy, degrades performance after transaction costs, and shows 
+  inconsistent results across train/test periods — not adopted as currently specified
 - Regime filter reduces absolute returns vs buy-and-hold, particularly post-2018 
-  in sustained low-vol bull markets
-- Sharpe ratio and drawdown computed in-sample only — no train/test split yet
-- Momentum crashes: strategy is vulnerable to sharp market reversals 
-  (e.g. COVID 2020) where recent winners become losers rapidly — 
-  the signal lags the reversal catastrophically
-- Regime changes: when the macro environment shifts fundamentally 
-  (rate cycle reversal, recession onset), past 3-12 month price 
-  history stops being predictive — the volatility regime filter 
-  partially addresses this but does not eliminate the risk
-- Crowding: if too many participants run the same momentum strategy, 
-  the signal gets arbitraged away
-- Horizon sensitivity: momentum only works at 3-12 month horizons — 
-  mean reversion dominates at shorter horizons, full price reversal 
-  at longer horizons
+  in sustained low-vol bull markets — a real cost of the drawdown protection
+- Momentum crashes: any future momentum-based signal remains vulnerable to sharp 
+  market reversals (e.g. COVID 2020) where recent winners become losers rapidly
+- Regime changes: when the macro environment shifts fundamentally (rate cycle 
+  reversal, recession onset), past volatility patterns may stop being predictive
+- Crowding: if too many participants run similar strategies, the edge erodes
+- Horizon sensitivity: momentum (if used) only works at 3-12 month horizons
+- Using raw Close, not dividend-adjusted — understates true returns
+- Past performance doesn't guarantee future regimes/results
 
