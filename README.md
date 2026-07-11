@@ -1,6 +1,8 @@
 # regime-momentum-signal
 Volatility regime detection and momentum signal backtest on SPY/VIX
 
+![Performance Tearsheet](figures/tearsheet.png)
+
 ## Motivation
 
 Build a systematic signal that adapts to volatility regimes, as a way to develop hands-on research and backtesting
