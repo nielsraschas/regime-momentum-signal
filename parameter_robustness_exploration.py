@@ -1,7 +1,13 @@
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 
+
+"""
+Exploratory script used to test regime-detection parameter robustness 
+(threshold 1.1-1.4, window pairs 20d/60d vs 20d/252d) before selecting 
+the final specification (20d/252d, threshold=1.2) used in backtest.py.
+Generates the switch-count figures referenced in the README methodology.
+"""
 
 
 

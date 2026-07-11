@@ -1,10 +1,13 @@
 import yfinance
 
+START_DATE = "2010-01-01"
+END_DATE = "2024-12-31"
+
 def download_data():
     #download data needed
-    data_finance_spy = yfinance.download("SPY", start="2010-01-01", end="2024-12-31")
-    data_finance_vix = yfinance.download("^VIX", start="2010-01-01", end="2024-12-31")
-    data_finance_irx = yfinance.download("^IRX", start="2010-01-01", end="2024-12-31")
+    data_finance_spy = yfinance.download("SPY", start=START_DATE, end=END_DATE)
+    data_finance_vix = yfinance.download("^VIX", start=START_DATE, end=END_DATE)
+    data_finance_irx = yfinance.download("^IRX", start=START_DATE, end=END_DATE)
 
     # flatten MultiIndex columns
     data_finance_spy.columns = data_finance_spy.columns.get_level_values(0)

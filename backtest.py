@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 
 
@@ -12,7 +11,7 @@ def give_regime_data():
     spy.loc[spy["rolling_20"] >= spy["rolling_252"]*1.2, "regime"] = 0
     return spy
 
-def sharp_ratio(data_return, irx_close):
+def sharpe_ratio(data_return, irx_close):
     data_adjusted_return = data_return - irx_close
     return  (data_adjusted_return.mean()/ data_adjusted_return.std()) * (252) ** (1/2)
 
@@ -56,11 +55,11 @@ def strategy_calculation(spy):
 
 def metrics_and_graphs(spy, irx_daily, label_strat = ""):
     spy = strategy_calculation(spy)
-    sharp_ratio_hold = sharp_ratio(spy["returns"], irx_daily)
+    sharp_ratio_hold = sharpe_ratio(spy["returns"], irx_daily)
     max_drawdown_hold = max_drawdown(spy["returns"])
-    sharp_ratio_strategy_tc = sharp_ratio(spy["strategy_returns"] - spy["transaction_cost"], irx_daily)
-    sharp_ratio_combined_strategy_tc = sharp_ratio(spy["strategy_combined_returns"] - spy["transaction_cost_combined"],
-                                                   irx_daily)
+    sharp_ratio_strategy_tc = sharpe_ratio(spy["strategy_returns"] - spy["transaction_cost"], irx_daily)
+    sharp_ratio_combined_strategy_tc = sharpe_ratio(spy["strategy_combined_returns"] - spy["transaction_cost_combined"],
+                                                    irx_daily)
     max_drawdown_strategy_tc = max_drawdown(spy["strategy_returns"] - spy["transaction_cost"])
     max_drawdown_combined_strategy_tc = max_drawdown(
         spy["strategy_combined_returns"] - spy["transaction_cost_combined"])

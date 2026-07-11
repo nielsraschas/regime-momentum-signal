@@ -2,8 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
-    spy = pd.read_csv(r"data\spy.csv", parse_dates=["Date"])
-    #print(spy["Date"].dtype)
+    spy = pd.read_csv("data/spy.csv", parse_dates=["Date"])
     spy["returns"] = spy["Close"].pct_change()
     spy["volatility_rolling_20"] = spy["returns"].rolling(20).std()*(252)**(1/2)
     figure, axes = plt.subplots(2,1)
