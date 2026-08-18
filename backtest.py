@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 
 def give_regime_data():
     spy = pd.read_csv("data/spy.csv", parse_dates=["Date"])
+    spy = spy.sort_values("Date").reset_index(drop=True)
     spy["returns"] = spy["Close"].pct_change()
     spy["rolling_20"] = spy["returns"].rolling(20).std() * (252) ** (1 / 2)
     spy["rolling_252"] = spy["returns"].rolling(252).std() * (252) ** (1 / 2)
@@ -85,6 +86,28 @@ def metrics_and_graphs(spy, irx_daily, label_strat=""):
     print(spy["combined_shift"].cumsum().max())
     return sharp_ratio_hold, max_drawdown_hold, sharp_ratio_strategy_tc, max_drawdown_strategy_tc, sharp_ratio_combined_strategy_tc, max_drawdown_combined_strategy_tc
 
+def compute_metrics(spy, irx_daily):
+    sharpe_hold = sharpe_ratio(spy["returns"], irx_daily)
+    dd_hold = max_drawdown(spy["returns"])
+    sharpe_strategy = sharpe_ratio(spy["strategy_returns"] - spy["transaction_cost"], irx_daily)
+    sharpe_combined = sharpe_ratio(spy["strategy_combined_returns"] - spy["transaction_cost_combined"],
+                                                    irx_daily)
+    dd_strategy = max_drawdown(spy["strategy_returns"] - spy["transaction_cost"])
+    dd_combined = max_drawdown(
+        spy["strategy_combined_returns"] - spy["transaction_cost_combined"])
+    return dict(sharpe_hold=sharpe_hold, sharpe_strategy=sharpe_strategy, sharpe_combined=sharpe_combined,
+                dd_hold=dd_hold, dd_strategy=dd_strategy, dd_combined=dd_combined)
+
+
+def walk_forward_evaluate(spy, irx_daily, n_splits=5):
+    spy = strategy_calculation(spy)
+    fold_bounds = pd.qcut(spy.index, n_splits, labels=False)
+    results = []
+    for fold in range(n_splits):
+        mask = fold_bounds == fold
+        results.append(compute_metrics(spy[mask], irx_daily[mask]))
+    return pd.DataFrame(results)
+
 
 if __name__ == "__main__":
     spy = give_regime_data()
@@ -100,6 +123,8 @@ if __name__ == "__main__":
         train_spy, irx_daily, label_strat="_train")
     sharp_ratio_hold_test, max_drawdown_hold_test, sharp_ratio_strategy_tc_test, max_drawdown_strategy_tc_test, sharp_ratio_combined_strategy_tc_test, max_drawdown_combined_strategy_tc_test = metrics_and_graphs(
         test_spy, irx_daily, label_strat="_test")
+
+    wf_df = walk_forward_evaluate(spy, irx_daily, n_splits=5)
 
     fig, axes = plt.subplots(3, 1, figsize=(10, 9), gridspec_kw={'height_ratios': [3, 3, 1]})
 
@@ -134,5 +159,6 @@ if __name__ == "__main__":
 
     fig.tight_layout()
     fig.savefig("figures/tearsheet.png")
+    ###
 
     print("END")
