@@ -4,13 +4,27 @@ import matplotlib.pyplot as plt
 from arch import arch_model
 
 
+def qlike(realized, forecast):
+    mask = realized > 0
+    ratio = realized[mask] / forecast[mask]
+    return (ratio - np.log(ratio) - 1).mean()
+
+def get_metrics(data, modelized_name, realized_name):
+    data["se_" + modelized_name] = (data[modelized_name + "_var_daily"] - data[realized_name]) ** 2
+    rmse = (data["se_" + modelized_name].sum() / len(data["se_" + modelized_name])) ** 0.5
+    qlike_value = qlike(data[realized_name], data[modelized_name + "_var_daily"])
+    return rmse, qlike_value
+
+
 if __name__ == "__main__":
     spy = pd.read_csv("data/spy.csv", parse_dates=["Date"])
     spy["returns"] = spy["Close"].pct_change()
     spy["realized_volatility"] = spy["returns"]**2
+    spy["realized_volatility_fwd"] = sum(spy["realized_volatility"].shift(-k) for k in range(1, 6)) / 5
     spy["rolling_20"] = spy["returns"].rolling(20).std()*(252)**(1/2)
     spy = spy.dropna(subset=["returns"])
     spy = spy.dropna(subset=["rolling_20"])
+    spy = spy.dropna(subset=["realized_volatility_fwd"])
 
     returns_pct = spy["returns"] * 100
 
@@ -43,7 +57,7 @@ if __name__ == "__main__":
 
     forecast_df['forecast_vol'] = (forecast_df['forecast_variance'] ** 0.5) / 100
     forecast_df['forecast_vol_annualized'] = forecast_df['forecast_vol'] * (252 ** 0.5)
-    test_rolling20 = test[["Date","rolling_20", "realized_volatility"]].reset_index(drop=True)
+    test_rolling20 = test[["Date","rolling_20", "realized_volatility", "realized_volatility_fwd"]].reset_index(drop=True)
 
     fig, ax = plt.subplots()
     ax.plot(test_rolling20["Date"], test_rolling20["rolling_20"], label='Rolling 20d vol (baseline)', color='red',
@@ -71,16 +85,23 @@ if __name__ == "__main__":
     print(rmse_garch, rmse_rolling)
     print(check["garch_var_daily"].min(), check["rolling_var_daily"].min())
 
-    def qlike(realized, forecast):
-        mask = realized > 0
-        ratio = realized[mask]/forecast[mask]
-        return (ratio - np.log(ratio) - 1).mean()
-
     qlike_garch = qlike(check["realized_volatility"], check["garch_var_daily"])
     qlike_rolling = qlike(check["realized_volatility"], check["rolling_var_daily"])
-
     print(qlike_garch, qlike_rolling)
 
+    crisis = (check["Date"] >= "2020-02-15") & (check["Date"] <= "2020-04-30")
+    calm = check[~crisis]
+    rmse_garch_nocovid = (calm["se_garch"].sum() / len(calm["se_garch"])) ** 0.5
+    rmse_rolling_nocovid = (calm["se_rolling"].sum() / len(calm["se_rolling"])) ** 0.5
+    print(rmse_garch_nocovid, rmse_rolling_nocovid)
+    qlike_garch_nocovid = qlike(calm["realized_volatility"], calm["garch_var_daily"])
+    qlike_rolling_nocovid = qlike(calm["realized_volatility"], calm["rolling_var_daily"])
+    print(qlike_garch_nocovid, qlike_rolling_nocovid)
+
+    rmse_garch_fwd, qlike_garch_fwd = get_metrics(check, "garch", "realized_volatility_fwd")
+    rmse_rolling_fwd, qlike_rolling_fwd = get_metrics(check, "rolling", "realized_volatility_fwd")
+    print(rmse_garch_fwd, rmse_rolling_fwd)
+    print(qlike_garch_fwd, qlike_rolling_fwd)
 
     print("END")
 
