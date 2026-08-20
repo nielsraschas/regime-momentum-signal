@@ -7,6 +7,7 @@ from arch import arch_model
 if __name__ == "__main__":
     spy = pd.read_csv("data/spy.csv", parse_dates=["Date"])
     spy["returns"] = spy["Close"].pct_change()
+    spy["realized_volatility"] = spy["returns"]**2
     spy["rolling_20"] = spy["returns"].rolling(20).std()*(252)**(1/2)
     spy = spy.dropna(subset=["returns"])
     spy = spy.dropna(subset=["rolling_20"])
@@ -42,7 +43,7 @@ if __name__ == "__main__":
 
     forecast_df['forecast_vol'] = (forecast_df['forecast_variance'] ** 0.5) / 100
     forecast_df['forecast_vol_annualized'] = forecast_df['forecast_vol'] * (252 ** 0.5)
-    test_rolling20 = test[["Date","rolling_20"]].reset_index(drop=True)
+    test_rolling20 = test[["Date","rolling_20", "realized_volatility"]].reset_index(drop=True)
 
     fig, ax = plt.subplots()
     ax.plot(test_rolling20["Date"], test_rolling20["rolling_20"], label='Rolling 20d vol (baseline)', color='red',
@@ -52,8 +53,34 @@ if __name__ == "__main__":
     ax.legend()
     fig.savefig("figures/garch_vs_rolling20_forecast.png")
 
-    check = forecast_df.merge(test_rolling20, on='Date').iloc[280:295]  # adjust slice to land near the spike
-    print(check[['Date', 'forecast_vol_annualized', 'rolling_20']])
+
+
+    check = forecast_df.merge(test_rolling20, on='Date')
+    print(check[['Date', 'forecast_vol_annualized', 'rolling_20']].iloc[280:295])
+
+    check["garch_var_daily"] = check["forecast_variance"] / 10000
+    check["rolling_var_daily"] = (check["rolling_20"] / (252 ** 0.5)) ** 2
+
+    check["se_garch"] = (check["garch_var_daily"] - check["realized_volatility"])**2
+    rmse_garch = (check["se_garch"].sum()/len(check["se_garch"]))**0.5
+
+    check["se_rolling"] = (check["rolling_var_daily"] - check["realized_volatility"]) ** 2
+    rmse_rolling = (check["se_rolling"].sum() / len(check["se_rolling"]))**0.5
+
+    print(check["garch_var_daily"].mean(), check["rolling_var_daily"].mean(), check["realized_volatility"].mean())
+    print(rmse_garch, rmse_rolling)
+    print(check["garch_var_daily"].min(), check["rolling_var_daily"].min())
+
+    def qlike(realized, forecast):
+        mask = realized > 0
+        ratio = realized[mask]/forecast[mask]
+        return (ratio - np.log(ratio) - 1).mean()
+
+    qlike_garch = qlike(check["realized_volatility"], check["garch_var_daily"])
+    qlike_rolling = qlike(check["realized_volatility"], check["rolling_var_daily"])
+
+    print(qlike_garch, qlike_rolling)
+
 
     print("END")
 
