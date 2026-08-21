@@ -22,6 +22,10 @@ if __name__ == "__main__":
     spy["realized_volatility"] = spy["returns"]**2
     spy["realized_volatility_fwd"] = sum(spy["realized_volatility"].shift(-k) for k in range(1, 6)) / 5
     spy["rolling_20"] = spy["returns"].rolling(20).std()*(252)**(1/2)
+    spy["rolling_252"] = spy["returns"].rolling(252).std() * (252) ** (1 / 2)
+    spy["regime"] = 1
+    spy.loc[spy["rolling_20"] >= spy["rolling_252"] * 1.2, "regime"] = 0
+
     spy = spy.dropna(subset=["returns"])
     spy = spy.dropna(subset=["rolling_20"])
     spy = spy.dropna(subset=["realized_volatility_fwd"])
@@ -57,7 +61,7 @@ if __name__ == "__main__":
 
     forecast_df['forecast_vol'] = (forecast_df['forecast_variance'] ** 0.5) / 100
     forecast_df['forecast_vol_annualized'] = forecast_df['forecast_vol'] * (252 ** 0.5)
-    test_rolling20 = test[["Date","rolling_20", "realized_volatility", "realized_volatility_fwd"]].reset_index(drop=True)
+    test_rolling20 = test[["Date", "rolling_20", "rolling_252", "realized_volatility", "realized_volatility_fwd", "regime"]].reset_index(drop=True)
 
     fig, ax = plt.subplots()
     ax.plot(test_rolling20["Date"], test_rolling20["rolling_20"], label='Rolling 20d vol (baseline)', color='red',
@@ -74,34 +78,48 @@ if __name__ == "__main__":
 
     check["garch_var_daily"] = check["forecast_variance"] / 10000
     check["rolling_var_daily"] = (check["rolling_20"] / (252 ** 0.5)) ** 2
-
     check["se_garch"] = (check["garch_var_daily"] - check["realized_volatility"])**2
-    rmse_garch = (check["se_garch"].sum()/len(check["se_garch"]))**0.5
-
     check["se_rolling"] = (check["rolling_var_daily"] - check["realized_volatility"]) ** 2
-    rmse_rolling = (check["se_rolling"].sum() / len(check["se_rolling"]))**0.5
 
     print(check["garch_var_daily"].mean(), check["rolling_var_daily"].mean(), check["realized_volatility"].mean())
-    print(rmse_garch, rmse_rolling)
     print(check["garch_var_daily"].min(), check["rolling_var_daily"].min())
 
-    qlike_garch = qlike(check["realized_volatility"], check["garch_var_daily"])
-    qlike_rolling = qlike(check["realized_volatility"], check["rolling_var_daily"])
+    rmse_garch, qlike_garch = get_metrics(check, "garch", "realized_volatility")
+    rmse_rolling, qlike_rolling = get_metrics(check, "rolling", "realized_volatility")
+    print(rmse_garch, rmse_rolling)
     print(qlike_garch, qlike_rolling)
 
     crisis = (check["Date"] >= "2020-02-15") & (check["Date"] <= "2020-04-30")
     calm = check[~crisis]
-    rmse_garch_nocovid = (calm["se_garch"].sum() / len(calm["se_garch"])) ** 0.5
-    rmse_rolling_nocovid = (calm["se_rolling"].sum() / len(calm["se_rolling"])) ** 0.5
+    rmse_garch_nocovid, qlike_garch_nocovid = get_metrics(calm, "garch", "realized_volatility")
+    rmse_rolling_nocovid, qlike_rolling_nocovid = get_metrics(calm, "rolling", "realized_volatility")
     print(rmse_garch_nocovid, rmse_rolling_nocovid)
-    qlike_garch_nocovid = qlike(calm["realized_volatility"], calm["garch_var_daily"])
-    qlike_rolling_nocovid = qlike(calm["realized_volatility"], calm["rolling_var_daily"])
     print(qlike_garch_nocovid, qlike_rolling_nocovid)
 
     rmse_garch_fwd, qlike_garch_fwd = get_metrics(check, "garch", "realized_volatility_fwd")
     rmse_rolling_fwd, qlike_rolling_fwd = get_metrics(check, "rolling", "realized_volatility_fwd")
     print(rmse_garch_fwd, rmse_rolling_fwd)
     print(qlike_garch_fwd, qlike_rolling_fwd)
+
+    check["garch_vol_annual"] = ((check["garch_var_daily"]) ** 0.5) * (252 ** 0.5)
+    check["regime_garch"] = 1
+    check.loc[check["garch_vol_annual"] >= check["rolling_252"] * 1.2, "regime_garch"] = 0
+
+    check["garch_regime_shift"] = 0
+    check.loc[check["regime_garch"] != check["regime_garch"].shift(1), "garch_regime_shift"] = 1
+    check["regime_shift"] = 0
+    check.loc[check["regime"] != check["regime"].shift(1), "regime_shift"] = 1
+
+    print("Rolling_based switches (test period):", check["regime_shift"].sum())
+    print("GARCH-based switches (test period):", check["garch_regime_shift"].sum())
+
+    check["garch_vol_annual_roll"] = check["garch_vol_annual"].rolling(5).mean()
+    check["regime_garch_roll"] = 1
+    check.loc[check["garch_vol_annual_roll"] >= check["rolling_252"] * 1.2, "regime_garch_roll"] = 0
+    check["garch_roll_regime_shift"] = 0
+    check.loc[check["regime_garch_roll"] != check["regime_garch_roll"].shift(1), "garch_roll_regime_shift"] = 1
+
+    print("GARCH-based rolling switches (test period):", check["garch_roll_regime_shift"].sum())
 
     print("END")
 
