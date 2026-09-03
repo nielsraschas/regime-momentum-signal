@@ -2,11 +2,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from arch import arch_model
-
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from arch import arch_model
 from backtest import sharpe_ratio, max_drawdown
 
 # -----------------------
@@ -26,6 +21,9 @@ def get_metrics(data, modelized_name, realized_name):
     rmse = (data["se_" + modelized_name].mean()) ** 0.5
     qlike_value = qlike(data[realized_name], data[modelized_name + "_var_daily"])
     return rmse, qlike_value
+
+def count_switches(data, col):
+    return (data[col] != data[col].shift(1)).astype(int).sum()
 
 def compute_regime_metrics(data, regime_col, irx_daily, label):
     """Position (lagged 1 day), TC-adjusted returns, Sharpe, max DD for a given
@@ -58,8 +56,6 @@ def build_garch_regimes(data):
 
     return data
 
-def count_switches(data, col):
-    return (data[col] != data[col].shift(1)).astype(int).sum()
 
 
 
@@ -138,7 +134,7 @@ if __name__ == "__main__":
     fig.savefig("figures/garch_vs_rolling20_forecast.png")
 
     check = forecast_df.merge(test_cols, on="Date")
-    print(check[["Date", "forecast_vol_annualized", "rolling_20"]].iloc[280:295])  # eyeball a window
+    # print(check[["Date", "forecast_vol_annualized", "rolling_20"]].iloc[280:295])  # eyeball a window
 
     # unit conversions: forecast_variance is in percent^2 (fit on returns*100)
     check["garch_var_daily"] = check["forecast_variance"] / 10000
@@ -158,6 +154,19 @@ if __name__ == "__main__":
     print(rmse_garch, rmse_rolling)
     print(qlike_garch, qlike_rolling)
 
+    # -----------------------------------------------------------------------
+    # GARCH-based regime signal -- raw vs 5-day-smoothed
+    # -----------------------------------------------------------------------
+    check = build_garch_regimes(check)
+
+    print("Rolling-based switches (test period):", count_switches(check, "regime"))
+    print("GARCH-based switches, raw (test period):", count_switches(check, "regime_garch"))
+    print("GARCH-based switches, 5d-smoothed (test period):", count_switches(check, "regime_garch_roll"))
+
+    # -----------------------------------------------------------------------
+    # Without COVID metric exploration
+    # -----------------------------------------------------------------------
+
     crisis = (check["Date"] >= "2020-02-15") & (check["Date"] <= "2020-04-30")
     calm = check[~crisis]
     rmse_garch_nocovid, qlike_garch_nocovid = get_metrics(calm, "garch", "realized_volatility")
@@ -169,17 +178,6 @@ if __name__ == "__main__":
     rmse_rolling_fwd, qlike_rolling_fwd = get_metrics(check, "rolling", "realized_volatility_fwd")
     print(rmse_garch_fwd, rmse_rolling_fwd)
     print(qlike_garch_fwd, qlike_rolling_fwd)
-
-    # -----------------------------------------------------------------------
-    # GARCH-based regime signal -- raw vs 5-day-smoothed
-    # -----------------------------------------------------------------------
-    build_garch_regimes(check)
-
-    print("Rolling-based switches (test period):", count_switches(check, "regime"))
-    print("GARCH-based switches, raw (test period):", count_switches(check, "regime_garch"))
-    print("GARCH-based switches, 5d-smoothed (test period):", count_switches(check, "regime_garch_roll"))
-
-    build_garch_regimes(calm)
 
     # -----------------------------------------------------------------------
     # Sharpe/TC on regime_garch_roll vs regime, same test period
@@ -196,11 +194,6 @@ if __name__ == "__main__":
 
     compute_regime_metrics(calm, "regime", irx_daily_calm, "regime")
     compute_regime_metrics(calm, "regime_garch_roll", irx_daily_calm, "regime_garch_roll")
-
-    print(len(calm), len(irx_daily), len(irx_daily_calm))
-    print(calm["returns"].index[:5].tolist())
-    print(irx_daily_calm.index[:5].tolist())
-
 
     print("END")
 
