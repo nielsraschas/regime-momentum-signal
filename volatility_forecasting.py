@@ -34,9 +34,12 @@ def compute_regime_metrics(data, regime_col, irx_daily, label):
     transaction_cost[position != position.shift(1)] = 0.001
     strategy_returns_tc = strategy_returns - transaction_cost
 
-    print(f"{label}: switches={count_switches(data, regime_col)}, "
-          f"Sharpe(TC)={sharpe_ratio(strategy_returns_tc, irx_daily):.3f}, "
-          f"MaxDD={max_drawdown(strategy_returns_tc):.3f}")
+    switches = count_switches(data, regime_col)
+    sharpe = sharpe_ratio(strategy_returns_tc, irx_daily)
+    dd = max_drawdown(strategy_returns_tc)
+
+    print(f"{label}: switches={switches}, Sharpe(TC)={sharpe:.3f}, MaxDD={dd:.3f}")
+    return dict(switches=switches, sharpe_tc=sharpe, max_dd=dd)
 
 # ----------------------------
 # GARCH-based regime signal
@@ -84,7 +87,7 @@ if __name__ == "__main__":
 
 
     # -----------------------------------------------------------------------
-    # GARCH fitting: Normal vs Student-t (Act 2 -- establishes t wins on AIC/BIC)
+    # GARCH fitting: Normal vs Student-t (establishes t wins on AIC/BIC)
     # -----------------------------------------------------------------------
     returns_pct = spy["returns"] * 100
 
@@ -122,17 +125,6 @@ if __name__ == "__main__":
     test_cols = test[["Date", "returns", "rolling_20", "rolling_252",
                       "realized_volatility", "realized_volatility_fwd", "regime"]].reset_index(drop=True)
 
-    # -----------------------------------------------------------------------
-    # Plot: GARCH forecast vol vs rolling_20 baseline, over the test period
-    # -----------------------------------------------------------------------
-    fig, ax = plt.subplots()
-    ax.plot(test_cols["Date"], test_cols["rolling_20"], label="Rolling 20d vol (baseline)",
-            color="red", linewidth=0.7)
-    ax.plot(forecast_df["Date"], forecast_df["forecast_vol_annualized"], label="GARCH forecast vol",
-            color="blue", linewidth=0.7)
-    ax.legend()
-    fig.savefig("figures/garch_vs_rolling20_forecast.png")
-
     check = forecast_df.merge(test_cols, on="Date")
     # print(check[["Date", "forecast_vol_annualized", "rolling_20"]].iloc[280:295])  # eyeball a window
 
@@ -149,6 +141,7 @@ if __name__ == "__main__":
     # -----------------------------------------------------------------------
     # Forecast-accuracy metrics -- single-day, calm-only, forward target
     # -----------------------------------------------------------------------
+
     rmse_garch, qlike_garch = get_metrics(check, "garch", "realized_volatility")
     rmse_rolling, qlike_rolling = get_metrics(check, "rolling", "realized_volatility")
     print(rmse_garch, rmse_rolling)
@@ -157,6 +150,7 @@ if __name__ == "__main__":
     # -----------------------------------------------------------------------
     # GARCH-based regime signal -- raw vs 5-day-smoothed
     # -----------------------------------------------------------------------
+
     check = build_garch_regimes(check)
 
     print("Rolling-based switches (test period):", count_switches(check, "regime"))
@@ -182,18 +176,62 @@ if __name__ == "__main__":
     # -----------------------------------------------------------------------
     # Sharpe/TC on regime_garch_roll vs regime, same test period
     # -----------------------------------------------------------------------
-    #
+
     irx_adjusted = pd.merge(check[["Date"]], irx, on="Date", how="left")
     irx_adjusted["Close"] = irx_adjusted["Close"].ffill().astype(float)
     irx_daily = irx_adjusted["Close"] / 100 / 252
 
-    compute_regime_metrics(check, "regime", irx_daily, "regime")
-    compute_regime_metrics(check, "regime_garch_roll", irx_daily, "regime_garch_roll")
+    baseline_full = compute_regime_metrics(check, "regime", irx_daily, "regime")
+    garch_full = compute_regime_metrics(check, "regime_garch_roll", irx_daily, "regime_garch_roll")
 
     irx_daily_calm = irx_daily[~crisis.values]
 
-    compute_regime_metrics(calm, "regime", irx_daily_calm, "regime")
-    compute_regime_metrics(calm, "regime_garch_roll", irx_daily_calm, "regime_garch_roll")
+    baseline_calm = compute_regime_metrics(calm, "regime", irx_daily_calm, "regime")
+    garch_calm = compute_regime_metrics(calm, "regime_garch_roll", irx_daily_calm, "regime_garch_roll")
+
+    # -----------------------------------------------------------------------
+    # GARCH tearsheet -- 3-panel companion to backtest.py's tearsheet.png
+    # -----------------------------------------------------------------------
+    check["cumulative_hold"] = (1 + check["returns"]).cumprod()
+
+    for col in ["regime", "regime_garch_roll"]:
+        pos = check[col].shift(1)
+        strat_ret = check["returns"] * pos
+        tc = pd.Series(0.0, index=check.index)
+        tc[pos != pos.shift(1)] = 0.001
+        check[f"cumulative_{col}_tc"] = (1 + strat_ret - tc).cumprod()
+
+    fig, axes = plt.subplots(3, 1, figsize=(10, 9), gridspec_kw={'height_ratios': [3, 3, 1]})
+
+    # Panel 1: equity curves, test period, TC-adjusted
+    axes[0].plot(check["Date"], check["cumulative_hold"], label="Buy & Hold", color="red")
+    axes[0].plot(check["Date"], check["cumulative_regime_tc"], label="Baseline Regime (rolling_20)", color="green")
+    axes[0].plot(check["Date"], check["cumulative_regime_garch_roll_tc"], label="GARCH Regime (5d-smoothed)",
+                 color="blue")
+    axes[0].legend()
+    axes[0].set_title("Cumulative Returns, Out-of-Time Test Period (with transaction costs)")
+
+    # Panel 2: forecast accuracy overlay -- why the strategies differ
+    axes[1].plot(check["Date"], check["rolling_20"], color="red", linewidth=0.7, label="Rolling 20d vol (baseline)")
+    axes[1].plot(check["Date"], check["garch_vol_annual"], color="blue", linewidth=0.7, label="GARCH forecast vol")
+    axes[1].legend()
+    axes[1].set_title("Forecast Accuracy: GARCH vs Rolling-Window Volatility")
+
+    # Panel 3: text metrics table
+    axes[2].axis("off")
+    metrics_text = (
+        f"{'Metric':<24}{'Baseline':>12}{'GARCH':>12}\n"
+        f"{'Sharpe (full, TC)':<24}{baseline_full['sharpe_tc']:>12.2f}{garch_full['sharpe_tc']:>12.2f}\n"
+        f"{'Sharpe (ex-COVID, TC)':<24}{baseline_calm['sharpe_tc']:>12.2f}{garch_calm['sharpe_tc']:>12.2f}\n"
+        f"{'Max Drawdown':<24}{baseline_full['max_dd']:>11.1%}{garch_full['max_dd']:>12.1%}\n"
+        f"{'Regime switches':<24}{baseline_full['switches']:>12d}{garch_full['switches']:>12d}\n"
+        f"{'  (GARCH raw, unsmoothed: ' + str(count_switches(check, 'regime_garch')) + ' switches)':<48}\n"
+    )
+    axes[2].text(0.05, 0.95, metrics_text, fontsize=10, family="monospace",
+                 verticalalignment="top")
+
+    fig.tight_layout()
+    fig.savefig("figures/garch_tearsheet.png")
 
     print("END")
 

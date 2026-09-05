@@ -2,6 +2,7 @@
 Volatility regime detection, momentum, and GARCH volatility forecasting — a systematic signal study on SPY
 
 ![Performance Tearsheet](figures/tearsheet.png)
+![GARCH Tearsheet](figures/garch_tearsheet.png)
 
 ## Motivation
 
@@ -123,6 +124,9 @@ The forecast smoothing uses a trailing window only, introducing no lookahead.
 **Summary: the regime signal alone is robust and adds value; the momentum 
 combination, as currently specified, does not.**
 
+See the Performance Tearsheet above for the equity curves, the regime overlay on price, and the full train/test metrics
+breakdown.
+
 The regime strategy achieves nearly identical cumulative return to buy-and-hold 
 (6.61x vs 6.84x — giving up only ~3% of total return) while improving the Sharpe 
 ratio (0.99 vs 0.77) and nearly halving maximum drawdown (17.8% vs 33.7%). The 
@@ -168,21 +172,24 @@ six comparisons, GARCH lower error in all six. The forecast leads rather than la
 regime shifts: at the February 2020 onset, for example, the GARCH forecast registered 
 elevated volatility a day ahead of the trailing window, which by construction can only 
 react after the fact.
- 
-Whether that forecasting advantage translates into a better *strategy* is a separate 
-question. Substituting the raw GARCH forecast for trailing volatility in the regime rule 
-initially produced far more switching (71 vs 28 over the test period) — the forecast is 
-more responsive to genuine regime shifts but also to daily noise, the same failure mode 
-that undermines the momentum filter. Applying a 5-day trailing smoother to the forecast 
-before thresholding cuts this to 34-36 switches. The smoothed forecast-based regime then 
-modestly outperforms the trailing-volatility baseline on risk-adjusted return over the 
-out-of-sample period (Sharpe 1.06 vs 1.02 with transaction costs; 1.17 vs 1.11 excluding 
-the COVID crisis), at the cost of slightly more switching and marginally higher drawdown. 
-The forecast's accuracy edge does carry through to the strategy — the improvement is small 
-but robust, and notably wider outside the 2020 crisis rather than driven by it, indicating 
-it is not a crisis artifact. This mirrors the momentum finding from the other direction: a 
-more *responsive* signal is not automatically a better one, and controlling its reactivity 
+
+Whether that forecasting advantage translates into a better *strategy* is a separate
+question. Substituting the raw GARCH forecast for trailing volatility in the regime rule
+initially produced far more switching (71 vs 28 over the test period) — the forecast is
+more responsive to genuine regime shifts but also to daily noise, the same failure mode
+that undermines the momentum filter. Applying a 5-day trailing smoother to the forecast
+before thresholding cuts this to 34-36 switches. The smoothed forecast-based regime then
+modestly outperforms the trailing-volatility baseline on risk-adjusted return over the
+out-of-sample period (Sharpe 1.06 vs 1.02 with transaction costs; 1.17 vs 1.11 excluding
+the COVID crisis), at the cost of slightly more switching and marginally higher drawdown.
+The forecast's accuracy edge does carry through to the strategy — the improvement is small
+but robust, and notably wider outside the 2020 crisis rather than driven by it, indicating
+it is not a crisis artifact. This mirrors the momentum finding from the other direction: a
+more *responsive* signal is not automatically a better one, and controlling its reactivity
 (here via smoothing) is what allows its underlying quality to show through net of costs.
+
+See the GARCH Tearsheet above for the out-of-sample equity curves, the forecast-vs-baseline overlay, and the full
+metrics comparison.
 
 ## Limitations
 - Momentum combination is not currently viable: naive 20-day binary filter is 

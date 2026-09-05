@@ -143,7 +143,7 @@ if __name__ == "__main__":
                          where=spy["regime"] == 0, color="red", alpha=0.25)
     axes[1].set_title("SPY Price with Regime Overlay (green=low-vol, red=high-vol)")
 
-    # Panel 3: could be a text-based metrics summary, or IS/OOS bar comparison
+    # Panel 3: text-based metrics summary
     axes[2].axis("off")
     metrics_text = (
         f"{'Metric':<20}{'Buy&Hold':>10}{'Regime':>10}{'Combined':>10}\n"
