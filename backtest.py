@@ -108,6 +108,16 @@ def walk_forward_evaluate(spy, irx_daily, n_splits=5):
         results.append(compute_metrics(spy[mask], irx_daily[mask]))
     return pd.DataFrame(results)
 
+def tc_sweep(spy, irx_daily, tcs=(0.0, 0.0005, 0.001, 0.002, 0.005, 0.01)):
+    """Regime strategy Sharpe and cumulative return for different costs per switch (same convention as strategy_calculation)."""
+    position = spy["regime"].shift(1)
+    gross = spy["returns"] * position
+    switch = (position != position.shift(1)).astype(float)
+    rows = []
+    for tc in tcs:
+        net = gross - switch * tc
+        rows.append({"tc_bp": tc * 1e4, "sharpe": sharpe_ratio(net, irx_daily), "cumret": (1 + net.fillna(0)).prod()})
+    return pd.DataFrame(rows)
 
 if __name__ == "__main__":
     spy = give_regime_data()
@@ -123,6 +133,12 @@ if __name__ == "__main__":
         train_spy, irx_daily, label_strat="_train")
     sharp_ratio_hold_test, max_drawdown_hold_test, sharp_ratio_strategy_tc_test, max_drawdown_strategy_tc_test, sharp_ratio_combined_strategy_tc_test, max_drawdown_combined_strategy_tc_test = metrics_and_graphs(
         test_spy, irx_daily, label_strat="_test")
+
+    sweep = tc_sweep(spy, irx_daily, tcs=[i * 0.0005 for i in range(31)])  # 0 to 150bp in 5bp steps
+    print(sweep[sweep["tc_bp"].isin([0, 5, 10, 20, 50, 100])].round(3))
+    sharpe_hold = sharpe_ratio(spy["returns"], irx_daily)
+    below = sweep.loc[sweep["sharpe"] < sharpe_hold, "tc_bp"]
+    print("Sharpe falls below buy-and-hold at about", below.min() if len(below) else ">150", "bp per switch")
 
     wf_df = walk_forward_evaluate(spy, irx_daily, n_splits=5)
 

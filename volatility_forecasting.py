@@ -25,13 +25,13 @@ def get_metrics(data, modelized_name, realized_name):
 def count_switches(data, col):
     return (data[col] != data[col].shift(1)).astype(int).sum()
 
-def compute_regime_metrics(data, regime_col, irx_daily, label):
+def compute_regime_metrics(data, regime_col, irx_daily, label, tc=0.001):
     """Position (lagged 1 day), TC-adjusted returns, Sharpe, max DD for a given
     regime column -- same position/TC logic as backtest.py's strategy_calculation."""
     position = data[regime_col].shift(1)
     strategy_returns = data["returns"] * position
     transaction_cost = pd.Series(0.0, index=data.index)
-    transaction_cost[position != position.shift(1)] = 0.001
+    transaction_cost[position != position.shift(1)] = tc
     strategy_returns_tc = strategy_returns - transaction_cost
 
     switches = count_switches(data, regime_col)
@@ -72,6 +72,7 @@ if __name__ == "__main__":
 
     spy["returns"] = spy["Close"].pct_change()
     spy["realized_volatility"] = spy["returns"] ** 2
+    spy["realized_volatility_next"] = spy["realized_volatility"].shift(-1)
     spy["realized_volatility_fwd"] = sum(spy["realized_volatility"].shift(-k) for k in range(1, 6)) / 5
     spy["rolling_20"] = spy["returns"].rolling(20).std() * (252) ** 0.5
     spy["rolling_252"] = spy["returns"].rolling(252).std() * (252) ** 0.5
@@ -122,8 +123,8 @@ if __name__ == "__main__":
     forecast_df["forecast_vol"] = (forecast_df["forecast_variance"] ** 0.5) / 100
     forecast_df["forecast_vol_annualized"] = forecast_df["forecast_vol"] * (252 ** 0.5)
 
-    test_cols = test[["Date", "returns", "rolling_20", "rolling_252",
-                      "realized_volatility", "realized_volatility_fwd", "regime"]].reset_index(drop=True)
+    test_cols = test[["Date", "returns", "rolling_20", "rolling_252", "realized_volatility",
+                      "realized_volatility_next", "realized_volatility_fwd", "regime"]].reset_index(drop=True)
 
     check = forecast_df.merge(test_cols, on="Date")
     # print(check[["Date", "forecast_vol_annualized", "rolling_20"]].iloc[280:295])  # eyeball a window
@@ -142,8 +143,8 @@ if __name__ == "__main__":
     # Forecast-accuracy metrics -- single-day, calm-only, forward target
     # -----------------------------------------------------------------------
 
-    rmse_garch, qlike_garch = get_metrics(check, "garch", "realized_volatility")
-    rmse_rolling, qlike_rolling = get_metrics(check, "rolling", "realized_volatility")
+    rmse_garch, qlike_garch = get_metrics(check, "garch", "realized_volatility_next")
+    rmse_rolling, qlike_rolling = get_metrics(check, "rolling", "realized_volatility_next")
     print(rmse_garch, rmse_rolling)
     print(qlike_garch, qlike_rolling)
 
@@ -163,8 +164,8 @@ if __name__ == "__main__":
 
     crisis = (check["Date"] >= "2020-02-15") & (check["Date"] <= "2020-04-30")
     calm = check[~crisis]
-    rmse_garch_nocovid, qlike_garch_nocovid = get_metrics(calm, "garch", "realized_volatility")
-    rmse_rolling_nocovid, qlike_rolling_nocovid = get_metrics(calm, "rolling", "realized_volatility")
+    rmse_garch_nocovid, qlike_garch_nocovid = get_metrics(calm, "garch", "realized_volatility_next")
+    rmse_rolling_nocovid, qlike_rolling_nocovid = get_metrics(calm, "rolling", "realized_volatility_next")
     print(rmse_garch_nocovid, rmse_rolling_nocovid)
     print(qlike_garch_nocovid, qlike_rolling_nocovid)
 
@@ -188,6 +189,13 @@ if __name__ == "__main__":
 
     baseline_calm = compute_regime_metrics(calm, "regime", irx_daily_calm, "regime")
     garch_calm = compute_regime_metrics(calm, "regime_garch_roll", irx_daily_calm, "regime_garch_roll")
+
+
+    # cost sweep: does the GARCH-vs-baseline gap depend on the cost per switch?
+    for tc in [0.0, 0.0005, 0.001, 0.002]:
+        b = compute_regime_metrics(check, "regime", irx_daily, f"baseline  {tc * 1e4:.0f}bp", tc=tc)
+        g = compute_regime_metrics(check, "regime_garch_roll", irx_daily, f"garch     {tc * 1e4:.0f}bp", tc=tc)
+        print(f"   -> Sharpe gap (GARCH - baseline) at {tc * 1e4:.0f}bp: {g['sharpe_tc'] - b['sharpe_tc']:.3f}")
 
     # -----------------------------------------------------------------------
     # GARCH tearsheet -- 3-panel companion to backtest.py's tearsheet.png
