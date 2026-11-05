@@ -47,8 +47,7 @@ def compute_regime_metrics(data, regime_col, irx_daily, label, tc=0.001):
 
 def build_garch_regimes(data):
     """Raw and 5-day-smoothed GARCH regime signals, same 1.2x threshold rule
-    as the baseline. Smoothing uses a TRAILING window only (no lookahead --
-    caught and fixed a negative-shift bug here on Aug 24)."""
+    as the baseline. Smoothing uses a TRAILING window only (no lookahead)."""
     data["garch_vol_annual"] = (data["garch_var_daily"] ** 0.5) * (252 ** 0.5)
     data["regime_garch"] = 1
     data.loc[data["garch_vol_annual"] >= data["rolling_252"] * 1.2, "regime_garch"] = 0
@@ -106,11 +105,11 @@ if __name__ == "__main__":
     train = spy[spy["Date"] < "2019-01-01"].copy()
     test = spy[spy["Date"] >= "2019-01-01"].copy()
 
-    am_full = arch_model(spy["returns"] * 100, vol="Garch", p=1, q=1, mean="Constant", dist="t")
-    res_full = am_full.fit(disp="off", first_obs=0, last_obs=len(train))
-    print(res_full.summary())
+    am_train = arch_model(spy["returns"] * 100, vol="Garch", p=1, q=1, mean="Constant", dist="t")
+    res_train = am_train.fit(disp="off", first_obs=0, last_obs=len(train))  # estimation uses train rows only
+    print(res_train.summary())
 
-    forecast = res_full.forecast(horizon=1, start=len(train), reindex=False)
+    forecast = res_train.forecast(horizon=1, start=len(train), reindex=False)
 
     test_dates = test["Date"].reset_index(drop=True)
     forecast_variance = forecast.variance["h.1"].reset_index(drop=True)

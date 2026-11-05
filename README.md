@@ -14,9 +14,8 @@ next-period volatility with a GARCH model produces a better-timed signal than re
 
 ## Data
 
-SPY + VIX + 3-month T-bill (^IRX), daily, 2010-2024, via yfinance. Using Close
-prices (not dividend-adjusted) — a simplification to revisit if returns need to
-reflect total return.
+SPY + VIX + 3-month T-bill (^IRX), daily, 2010-2024, via yfinance. SPY prices are
+the dividend-adjusted Close, so returns are total returns with dividends reinvested.
 
 **Setup:** run `data_download.py` first to fetch the data locally into `data/`
 before running `parameter_robustness_exploration.py` or `backtest.py`. Data files are not tracked in this
@@ -54,11 +53,15 @@ selected as it produced more persistent regimes and more stable switch counts ac
 specification showed a sharp sensitivity to threshold choice (186 switches at 1.1 vs 45 at 1.4), while the 20d/252d
 specification was more robust (106 at 1.1 vs 47 at 1.4).
 
-**Parameter robustness:** thresholds from 1.1 to 1.4 were tested on both window pairs. The 20d/252d specification
-produced
-stable switch counts across 1.2-1.4 (55-61 switches over 14 years, approximately 4 per year), suggesting results are not
-sensitive to the exact threshold in this range. A threshold of 1.2 was selected. Regime persistence of approximately 3
-months on average is consistent with the momentum holding periods documented in Jegadeesh & Titman (1993).
+**Parameter robustness:** thresholds from 1.1 to 1.4 were tested on both window pairs, on the full 2010-2024 sample.
+Across 1.2-1.4
+the 20d/252d switch count falls from 61 to 55 to 47 (about -23% end to end) against 135, 65 and 45 for 20d/60d (about
+-67%), so the
+regime frequency is much less threshold-sensitive with the 252-day window; at the chosen threshold it is about 4
+switches per year.
+A threshold of 1.2 was selected from this switch-count analysis (strategy performance was not used to choose it;
+performance sensitivity to
+the threshold was not tested). Regime persistence is approximately 3 months on average.
 
 **Forecasting the volatility signal:** the regime rule above reacts to *trailing* 20-day volatility — it only registers
 a
@@ -120,12 +123,12 @@ The forecast smoothing uses a trailing window only, introducing no lookahead.
 The regime strategy's Sharpe ratio stays above buy-and-hold (0.77) up to roughly 65–70bp per switch; the 10bp assumption
 is conservative for a liquid ETF such as SPY.
 
-**Out-of-sample split (with TC):**
+**Train/test split (with TC):**
 
 | Metric       | Period            | Buy & Hold | Regime Strategy | Combined Strategy |
 |--------------|-------------------|------------|-----------------|-------------------|
 | Sharpe ratio | Train (2010-2018) | 0.77       | 0.93            | 0.67              |
-| Sharpe ratio | Test (2019-2024)  | 0.78       | 1.01            | 0.77              |
+| Sharpe ratio | Test (2019-2024)  | 0.78       | 1.01            | 0.78              |
 | Max drawdown | Train (2010-2018) | 19.3%      | 15.7%           | 19.3%             |
 | Max drawdown | Test (2019-2024)  | 33.7%      | 18.7%           | 12.0%             |
 
@@ -138,7 +141,7 @@ is conservative for a liquid ETF such as SPY.
 | Max drawdown                    | 18.7%               | 19.1%                            |
 | Regime switches (full)          | 28                  | 36                               |
 
-The trailing-volatility Sharpe here (1.021) differs slightly from the out-of-sample table above (1.01) because this
+The trailing-volatility Sharpe here (1.021) differs slightly from the train/test table above (1.01) because this
 sample excludes the last five trading days of 2024, which have no forward target.
 
 **Sensitivity to the cost per switch (out-of-sample test period, 2019-2024):**
@@ -160,16 +163,16 @@ combination, as currently specified, does not.**
 See the Performance Tearsheet above for the equity curves, the regime overlay on price, and the full train/test metrics
 breakdown.
 
-The regime strategy achieves nearly identical cumulative return to buy-and-hold
-(6.61x vs 6.84x — giving up only ~3% of total return) while improving the Sharpe
-ratio (0.99 vs 0.77) and nearly halving maximum drawdown (17.8% vs 33.7%). The
+The regime strategy gives up about 9% of buy-and-hold's terminal wealth net of costs
+(6.22x vs 6.84x) while improving the Sharpe ratio (0.96 vs 0.77) and cutting maximum
+drawdown by about 45% (18.7% vs 33.7%). The
 strategy underperforms during the sustained low-volatility bull market post-2018,
 but the volatility filter's drawdown protection during stress periods largely
 compensates.
 
 Adding a 20-day momentum filter (invest only when regime = low vol AND 20-day
-return > 0) significantly reduces cumulative return (4.0x vs 6.6x for regime-only)
-despite marginally improving max drawdown (14.3% vs 17.8%). The 20-day momentum
+return > 0) significantly reduces cumulative return before costs (4.0x vs 6.6x for regime-only)
+despite marginally improving max drawdown (14.3% vs 17.8%, before costs). The 20-day momentum
 signal is too noisy as a binary filter — it generates frequent unnecessary exits
 within calm regimes, missing upside in a generally trending market. A longer
 momentum window or continuous position sizing rather than binary filtering would
@@ -177,7 +180,7 @@ be more appropriate — left for future work.
 
 Accounting for transaction costs (0.1% per position change) confirms the regime
 strategy's benefit is largely robust — cumulative return drops modestly from
-6.61x to 6.22x (Sharpe 0.99 to 0.96) given its 61 switches over 14 years. The
+6.61x to 6.22x (Sharpe 0.99 to 0.96) given its 61 switches over 15 years. The
 combined regime+momentum strategy fares much worse: switching 275 times —
 4.5x more often, since both the regime and momentum signals must independently
 align — means transaction costs erode cumulative return from 4.01x to 3.05x
@@ -187,13 +190,15 @@ can become value-destructive once realistic trading costs are included,
 reinforcing why the naive momentum combination is not adopted as currently
 specified.
 
-An out-of-sample check (train 2010-2018, test 2019-2024) confirms the regime
+A train/test split (train 2010-2018, test 2019-2024) is consistent with the regime
 strategy's robustness: it improves Sharpe over buy-and-hold in both periods
 (0.77→0.93 train, 0.78→1.01 test) and reduces max drawdown in both (19.3%→15.7%
-train, 33.7%→18.7% test). The combined strategy is less consistent — it
+train, 33.7%→18.7% test). This is a stability check, not a clean out-of-sample test: the window and threshold were
+chosen from full-sample switch-count analysis (not from strategy performance). The combined strategy is less
+consistent — it
 underperforms buy-and-hold on Sharpe in the train period (0.67 vs 0.77) but
-roughly matches it in test (0.77 vs 0.78), while offering better drawdown
-protection in both periods. This period-dependence, combined with the
+matches it in test (0.78 vs 0.78), while offering better drawdown
+protection in the test period only (negligible in train). This period-dependence, combined with the
 transaction cost sensitivity already noted, suggests the regime signal alone
 is the more robust and reliable component of this research.
 
@@ -205,9 +210,9 @@ QLIKE is the more informative one here, because squared returns are a very noisy
 extreme days. GARCH has lower QLIKE on all three targets (1.45 vs 1.57 on the full sample; 1.45 vs 1.55 excluding the
 crisis; 0.42 vs 0.55 on the five-day target) and lower RMSE on two of them (4.8e-4 vs 5.5e-4 on the full sample; 3.5e-4
 vs 4.2e-4 on the five-day target). Excluding the crisis, single-day RMSE is indistinguishable (2.105e-4 for both), which
-suggests that GARCH’s single-day RMSE advantage comes mainly from the crisis period. The forecast leads rather than lags
-at regime shifts: at the February 2020 onset, for example, the GARCH forecast registered elevated volatility a day ahead
-of the trailing window.
+suggests that GARCH’s single-day RMSE advantage comes mainly from the crisis period. In the one episode inspected (the
+February 2020 onset), the GARCH forecast registered elevated volatility a day ahead of the trailing window; this single
+example is illustrative, not a systematic lead-lag result.
 
 Whether that forecasting advantage translates into a better *strategy* is a separate
 question. Substituting the raw GARCH forecast for trailing volatility in the regime rule
@@ -241,8 +246,10 @@ metrics comparison.
   the added model complexity is a judgment call, not a clear win. The forecast-accuracy improvement is the more reliable
   result.
 - Conventions: trades execute at the close that generated the signal; cash earns zero in the strategy returns while
-  Sharpe ratios subtract the T-bill rate (conservative); the ex-COVID figures are computed after removing the 15 Feb–30
-  Apr 2020 rows from the test period, so the one-day signal lag bridges that gap once.
+  Sharpe ratios subtract the T-bill rate (conservative); the regime defaults to long until the 252-day window fills
+  (about the first year); switch counts include the first row (initial entry), so true regime changes are one fewer;
+  the ex-COVID figures are computed after removing the 15 Feb–30 Apr 2020 rows from the test period, so the one-day
+  signal lag bridges that gap once.
 - Momentum crashes: any future momentum-based signal remains vulnerable to sharp
   market reversals (e.g. COVID 2020) where recent winners become losers rapidly
 - Regime changes: when the macro environment shifts fundamentally (rate cycle
@@ -252,6 +259,7 @@ metrics comparison.
   best way to exploit it
 - Crowding: if too many participants run similar strategies, the edge erodes
 - Horizon sensitivity: momentum (if used) only works at 3-12 month horizons
-- Using raw Close, not dividend-adjusted — understates true returns
+- Single asset (SPY) over one sample period (2010-2024, a prolonged bull market with one major crash); no other markets
+  or regimes tested
 - Past performance doesn't guarantee future regimes/results
 

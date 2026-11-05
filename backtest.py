@@ -8,6 +8,7 @@ def give_regime_data():
     spy["returns"] = spy["Close"].pct_change()
     spy["rolling_20"] = spy["returns"].rolling(20).std() * (252) ** (1 / 2)
     spy["rolling_252"] = spy["returns"].rolling(252).std() * (252) ** (1 / 2)
+    spy["momentum"] = spy["returns"].rolling(20).sum()
     spy["regime"] = 1
     spy.loc[spy["rolling_20"] >= spy["rolling_252"] * 1.2, "regime"] = 0
     return spy
@@ -36,7 +37,6 @@ def strategy_calculation(spy):
     spy["cumulative_regime_shift"] = spy["regime_shift"].cumsum()
 
     ##### Momentum integrated
-    spy["momentum"] = spy["returns"].rolling(20).sum()
     spy["position_combined"] = 0
     spy.loc[(spy["regime"].shift(1) == 1) & (spy["momentum"].shift(1) > 0), "position_combined"] = 1
     spy["strategy_combined_returns"] = spy["returns"] * spy["position_combined"]
@@ -84,29 +84,13 @@ def metrics_and_graphs(spy, irx_daily, label_strat=""):
     print(spy["cumulative_strategy_returns_tc"].iloc[-1])
     print(spy["cumulative_strategy_combined_returns_tc"].iloc[-1])
     print(spy["combined_shift"].cumsum().max())
+    print("NO-TC  cum regime/combined:", spy["cumulative_strategy_returns"].iloc[-1], spy["cumulative_strategy_combined_returns"].iloc[-1])
+    print("NO-TC  Sharpe regime/combined:", sharpe_ratio(spy["strategy_returns"], irx_daily), sharpe_ratio(spy["strategy_combined_returns"], irx_daily))
+    print("NO-TC  MaxDD regime/combined:", max_drawdown(spy["strategy_returns"]), max_drawdown(spy["strategy_combined_returns"]))
+    print("TC     MaxDD hold/regime/combined:", max_drawdown_hold, max_drawdown_strategy_tc, max_drawdown_combined_strategy_tc)
+    print("TC     Sharpe hold/regime/combined:", sharp_ratio_hold, sharp_ratio_strategy_tc,
+          sharp_ratio_combined_strategy_tc)
     return sharp_ratio_hold, max_drawdown_hold, sharp_ratio_strategy_tc, max_drawdown_strategy_tc, sharp_ratio_combined_strategy_tc, max_drawdown_combined_strategy_tc
-
-def compute_metrics(spy, irx_daily):
-    sharpe_hold = sharpe_ratio(spy["returns"], irx_daily)
-    dd_hold = max_drawdown(spy["returns"])
-    sharpe_strategy = sharpe_ratio(spy["strategy_returns"] - spy["transaction_cost"], irx_daily)
-    sharpe_combined = sharpe_ratio(spy["strategy_combined_returns"] - spy["transaction_cost_combined"],
-                                                    irx_daily)
-    dd_strategy = max_drawdown(spy["strategy_returns"] - spy["transaction_cost"])
-    dd_combined = max_drawdown(
-        spy["strategy_combined_returns"] - spy["transaction_cost_combined"])
-    return dict(sharpe_hold=sharpe_hold, sharpe_strategy=sharpe_strategy, sharpe_combined=sharpe_combined,
-                dd_hold=dd_hold, dd_strategy=dd_strategy, dd_combined=dd_combined)
-
-
-def walk_forward_evaluate(spy, irx_daily, n_splits=5):
-    spy = strategy_calculation(spy)
-    fold_bounds = pd.qcut(spy.index, n_splits, labels=False)
-    results = []
-    for fold in range(n_splits):
-        mask = fold_bounds == fold
-        results.append(compute_metrics(spy[mask], irx_daily[mask]))
-    return pd.DataFrame(results)
 
 def tc_sweep(spy, irx_daily, tcs=(0.0, 0.0005, 0.001, 0.002, 0.005, 0.01)):
     """Regime strategy Sharpe and cumulative return for different costs per switch (same convention as strategy_calculation)."""
@@ -139,8 +123,6 @@ if __name__ == "__main__":
     sharpe_hold = sharpe_ratio(spy["returns"], irx_daily)
     below = sweep.loc[sweep["sharpe"] < sharpe_hold, "tc_bp"]
     print("Sharpe falls below buy-and-hold at about", below.min() if len(below) else ">150", "bp per switch")
-
-    wf_df = walk_forward_evaluate(spy, irx_daily, n_splits=5)
 
     fig, axes = plt.subplots(3, 1, figsize=(10, 9), gridspec_kw={'height_ratios': [3, 3, 1]})
 
